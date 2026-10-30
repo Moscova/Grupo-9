@@ -7,53 +7,41 @@ Igor Boschetti
 
 Grafico Topológico:
 
-flowchart TD
-    %% Estilos
-    classDef host fill:#e1f5fe,stroke:#039be5,stroke-width:2px;
-    classDef vm fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px;
-    classDef service fill:#e8f5e9,stroke:#43a047,stroke-width:1px;
-    classDef storage fill:#fff3e0,stroke:#fb8c00,stroke-width:1px;
-    classDef network fill:#fce4ec,stroke:#d81b60,stroke-width:1px;
-
-    %% Nodos principales
-    Host["💻 Máquina Física (Host)\n(Cliente Web / Cliente SSH)"]:::host
+graph TD
+    Host[Maquina Fisica Host / Cliente] <-->|Adaptador Puente: Mismo Rango IP| Network[Red: IP Estatica, Netmask, Gateway]
     
-    subgraph Red["Configuración de Red Local (Bridge / Adaptador Puente)"]
-        IP_Est["IP Estática: En rango de la red física\nNetmask: Definida\nGateway: Definido"]:::network
-    end
-
-    subgraph VM["Servidor Debian (Máquina Virtual)"]
-        direction TB
-        Hostname["Hostname: TPServer"]:::vm
+    subgraph VM [Maquina Virtual: Debian GNU/Linux - Hostname: TPServer]
         
-        subgraph Servicios["Servicios y Aplicaciones"]
-            SSH["🔐 SSH Server\n(Acceso root con clave pública/privada)"]:::service
-            Web["🌐 Apache + PHP (>= 7.3)\n(Sirviendo index.php y logo.png)"]:::service
-            DB["🗄️ MariaDB\n(Base de datos: db.sql)"]:::service
+        subgraph Servicios [1. Servicios Expuestos]
+            SSH[SSH Server: Acceso root por claves RSA]
+            Apache[Apache + PHP 7.3: index.php y logo.png]
+            DB[MariaDB: Base de datos db.sql]
         end
-
-        subgraph Almacenamiento["Almacenamiento (Discos y Particiones)"]
-            SDA[(" Disco Base (/dev/sda)\nSistema Operativo")]:::storage
-            SDC[(" Disco Adicional (/dev/sdc - 10 GB)\nTipo 83 (Linux)")]:::storage
+        
+        subgraph Almacenamiento [2. Almacenamiento y Discos]
+            SDA[(Disco Base: /dev/sda)]
+            SDC[(Disco Adicional 10 GB: /dev/sdc)]
             
-            PartWWW["📁 /www_dir (3 GB)\n(Montaje automático)\n(Apunta a Apache)"]:::storage
-            PartBKP["📁 /backup_dir (6 GB)\n(Montaje automático)\n(Almacena los .tar.gz)"]:::storage
+            Part1[/Particion 1 tipo 83: 3 GB<br>Montaje: /www_dir/]
+            Part2[/Particion 2 tipo 83: 6 GB<br>Montaje: /backup_dir/]
+            
+            SDC --> Part1
+            SDC --> Part2
         end
         
-        subgraph Scripts["Automatización (Crontab)"]
-            Cron["⚙️ /opt/scripts/backup_full.sh\nDiario 00:00 -> /var/logs\nL,M,V 23:00 -> /www_dir"]:::service
+        subgraph Tareas [3. Automatizacion de Backups]
+            Cron((Crontab))
+            Script[Script: /opt/scripts/backup_full.sh]
+            
+            Cron -->|Todos los dias 00:00| LogDir[/var/logs/]
+            Cron -->|L, M, V 23:00| Part1
+            
+            LogDir -.-> Script
+            Part1 -.-> Script
+            Script -->|Almacena archivos .tar.gz| Part2
         end
+        
+        Network --> SSH
+        Network --> Apache
+        Apache -.->|Apunta DocumentRoot a| Part1
     end
-
-    %% Conexiones
-    Host <-->|Peticiones HTTP/SSH| Red
-    Red <-->|eth0 / enp0s3| Hostname
-    Hostname --- Servicios
-    Hostname --- Almacenamiento
-    Hostname --- Scripts
-    
-    SDC --> PartWWW
-    SDC --> PartBKP
-    
-    Web -.-|Lee archivos web desde| PartWWW
-    Cron -.-|Guarda backups en| PartBKP
