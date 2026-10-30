@@ -7,48 +7,53 @@ Igor Boschetti
 
 Grafico Topológico:
 
-graph TD
-    %% Definición de la Máquina Física y Conexión
-    Host[🖥️ Máquina Física / Host] <-->|Red Local / Mismo Rango IP| Net[🌐 Interfaz de Red VM\nIP Estática, Netmask, Gateway]
+flowchart TD
+    %% Estilos
+    classDef host fill:#e1f5fe,stroke:#039be5,stroke-width:2px;
+    classDef vm fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px;
+    classDef service fill:#e8f5e9,stroke:#43a047,stroke-width:1px;
+    classDef storage fill:#fff3e0,stroke:#fb8c00,stroke-width:1px;
+    classDef network fill:#fce4ec,stroke:#d81b60,stroke-width:1px;
 
-    %% Contenedor Principal: Máquina Virtual
-    subgraph VM [🐧 Máquina Virtual: Debian GNU/Linux (Hostname: TPServer)]
-        direction TB
-        Net
-        
-        %% Servicios de Red
-        subgraph Servicios [⚙️ Servicios]
-            SSH[🔐 SSH Server\nAcceso root por Clave Pública/Privada]
-            Web[🌐 Apache + PHP >= 7.3\nSirviendo index.php y logo.png]
-            DB[🗄️ MariaDB\nCarga de db.sql]
-        end
-
-        %% Almacenamiento y Discos
-        subgraph Almacenamiento [💾 Almacenamiento]
-            Disk1[(Disco 1\nOS Base)]
-            Disk2[(Disco 2\n10 GB Adicional)]
-            
-            Part1[/Partición 1 tipo 83\n3 GB - Montaje: /www_dir/]
-            Part2[/Partición 2 tipo 83\n6 GB - Montaje: /backup_dir/]
-            
-            Disk2 --> Part1
-            Disk2 --> Part2
-        end
-
-        %% Tareas Automatizadas
-        subgraph Automatizacion [🕒 Tareas Automáticas / Cron]
-            BKP[📜 /opt/scripts/backup_full.sh]
-            Cron((Cron Jobs))
-            
-            Cron -->|Diario 00:00| Log[/var/log/]
-            Cron -->|L-M-V 23:00| Part1
-            
-            Log -.-> BKP
-            Part1 -.-> BKP
-            BKP -->|Guarda archivos .tar.gz| Part2
-        end
-        
-        %% Conexiones internas
-        Net --- Servicios
-        Web -.->|Apunta a| Part1
+    %% Nodos principales
+    Host["💻 Máquina Física (Host)\n(Cliente Web / Cliente SSH)"]:::host
+    
+    subgraph Red["Configuración de Red Local (Bridge / Adaptador Puente)"]
+        IP_Est["IP Estática: En rango de la red física\nNetmask: Definida\nGateway: Definido"]:::network
     end
+
+    subgraph VM["Servidor Debian (Máquina Virtual)"]
+        direction TB
+        Hostname["Hostname: TPServer"]:::vm
+        
+        subgraph Servicios["Servicios y Aplicaciones"]
+            SSH["🔐 SSH Server\n(Acceso root con clave pública/privada)"]:::service
+            Web["🌐 Apache + PHP (>= 7.3)\n(Sirviendo index.php y logo.png)"]:::service
+            DB["🗄️ MariaDB\n(Base de datos: db.sql)"]:::service
+        end
+
+        subgraph Almacenamiento["Almacenamiento (Discos y Particiones)"]
+            SDA[(" Disco Base (/dev/sda)\nSistema Operativo")]:::storage
+            SDC[(" Disco Adicional (/dev/sdc - 10 GB)\nTipo 83 (Linux)")]:::storage
+            
+            PartWWW["📁 /www_dir (3 GB)\n(Montaje automático)\n(Apunta a Apache)"]:::storage
+            PartBKP["📁 /backup_dir (6 GB)\n(Montaje automático)\n(Almacena los .tar.gz)"]:::storage
+        end
+        
+        subgraph Scripts["Automatización (Crontab)"]
+            Cron["⚙️ /opt/scripts/backup_full.sh\nDiario 00:00 -> /var/logs\nL,M,V 23:00 -> /www_dir"]:::service
+        end
+    end
+
+    %% Conexiones
+    Host <-->|Peticiones HTTP/SSH| Red
+    Red <-->|eth0 / enp0s3| Hostname
+    Hostname --- Servicios
+    Hostname --- Almacenamiento
+    Hostname --- Scripts
+    
+    SDC --> PartWWW
+    SDC --> PartBKP
+    
+    Web -.-|Lee archivos web desde| PartWWW
+    Cron -.-|Guarda backups en| PartBKP
